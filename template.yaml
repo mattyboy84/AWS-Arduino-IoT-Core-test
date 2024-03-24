@@ -1,0 +1,125 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Transform:
+  - AWS::LanguageExtensions
+  - AWS::Serverless-2016-10-31
+
+Parameters:
+  certificateArn:
+    Type: String
+    Description: Arn of the certificate that the device uses
+    Default: ''
+  certificateId:
+    Type: String
+    Description: Id of the certificate that the device uses
+    Default: ''
+  topicName:
+    Type: String
+    Description: Name of the topic to receive messages on
+    Default: 'topic'
+
+Globals:
+  Function:
+    CodeUri: ./
+    Runtime: nodejs20.x
+    MemorySize: 3008
+    Timeout: 900
+    #Environment:
+    #  Variables:
+    #    a: !Ref b
+
+Resources:
+  lambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-lambdaRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  
+  thingPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-policy"
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: "iot:Connect"
+             # Allows all clients - clientIds are set from the MQTT library in the Arduino code (Not necessarily same as thing name)
+            Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:client/*"
+          - Effect: Allow
+            Action:
+              - "iot:Receive"
+              - "iot:Publish"
+              - "iot:Subscribe"
+            Resource:
+              - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/*"
+              - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/*"
+  
+  thing:
+    Type: AWS::IoT::Thing
+    Properties:
+      ThingName: !Sub "${AWS::StackName}-thing"
+      AttributePayload: 
+        Attributes:
+          beep: boop
+  
+  thingPolicyAttachment:
+    Type: AWS::IoT::PolicyPrincipalAttachment
+    Properties:
+      PolicyName: !Ref thingPolicy
+      Principal: !Ref certificateArn
+  
+  rule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName: !Sub "lambda_invoke_rule"
+      TopicRulePayload:
+        AwsIotSqlVersion: '2015-10-08'
+        RuleDisabled: false
+        Sql: !Sub |
+          SELECT message FROM '${topicName}' WHERE message = "Hello World"
+        Actions:
+          - Lambda:
+              FunctionArn: !GetAtt invokeFunction.Arn
+        #ErrorAction:
+        #  Action
+  
+  invokeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-invokeFunction"
+      Role: !GetAtt lambdaRole.Arn
+      Handler: index.handler
+      CodeUri: ./src
+  
+  invokeFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', ['/aws/lambda/', !Ref invokeFunction]]
+  
+  invokeFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:invokeFunction
+      Principal: iot.amazonaws.com
+      FunctionName: !GetAtt invokeFunction.Arn
+      SourceArn: !GetAtt rule.Arn
+  
+Outputs:
+  thingId:
+    Value: !GetAtt thing.Id
+    Description: Id of thing
+  thingArn:
+    Value: !GetAtt thing.Arn
+    Description: Arn of thing

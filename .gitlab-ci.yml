@@ -1,0 +1,15 @@
+image: public.ecr.aws/sam/build-nodejs18.x:latest
+
+stages:
+  - deploy
+
+variables:
+  STACK_NAME: aws-iot-core-test
+  STACK_REGION: eu-west-2
+
+backend:
+  stage: deploy
+  script:
+    - sam build
+    - sam package --output-template-file packaged.yaml --s3-bucket $S3_DEPLOY_BUCKET --region $STACK_REGION
+    - sam deploy --no-fail-on-empty-changeset --template-file packaged.yaml --stack-name $STACK_NAME --s3-bucket $S3_DEPLOY_BUCKET --capabilities CAPABILITY_NAMED_IAM --region $STACK_REGION  --parameter-overrides certificateArn=$AWS_IOT_CORE_CERT_ARN_EU_WEST_2 certificateId=$AWS_IOT_CORE_CERT_ID_EU_WEST_2
