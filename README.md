@@ -1,5 +1,8 @@
 # Arduino-AWS-IoT-Core
 
+![Diagram](images/Diagram.png)
+
+
 ## Arduino
 
 This uses the `Arduino MKR WiFi 1010` to publish to `AWS IoT` over MQTT
