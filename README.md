@@ -1,6 +1,6 @@
 # Arduino-AWS-IoT-Core
 
-![Diagram](images/Diagram.png)
+![Diagram](images/diagram.png)
 
 
 ## Arduino
